@@ -1,4 +1,7 @@
-T1=3+6
-T2=4*6
-T3=1+0
-T4=T1+T2
+Real cuenta,numero,resultado;
+Entero valor=10;
+Leer(valor);
+cuenta=23+(numero-valor);
+numero=cuenta/123.99;
+resultado=numero+cuenta;
+Escribir(resultado);

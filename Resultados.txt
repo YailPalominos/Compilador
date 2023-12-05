@@ -1,0 +1,6 @@
+cuenta=0
+numero=0
+resultado=0
+valor=10
+cuenta=10
+resultado=10

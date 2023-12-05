@@ -9,240 +9,415 @@ public class Analisis {
      * @author Braulio Yail Palominos Patiño
      */
     private String codigoFuente = ""; // Codigo fuente resibido de la clase de ejecutador.
-    private List<Operacion> operaciones;// Seguardan las operaciones ya realizadas.
-    private List<Simbolo> simbolos;// Generamos un sub tipo de tabla de simbolos para realizar un mejor analisis.
+    private List<Simbolo> tablaSimbolos;// Lista de tablaSimbolos donde se guardara toda la información.
+    private List<Errores> tablaErrores;// Lista de tablaErrores donde se guaradara todos los errores
+    private List<String> operaciones;// Resultado de las operaciones.
+    private int posLectura = 0; // Posición de lectura con respecto al codigo fuente.
+    private int linea = 1; // Linea en la que va la posicion de lectura con respecto al codigo fuente.
+    private int Id = 0;// Identificardor auto incremental para las variables.
+    private List<Operacion> operacionesOptimizacion;// Seguardan las operaciones ya realizadas.
 
     public Analisis(String codigoFuente) {
         this.codigoFuente = codigoFuente;
     }
 
+    // Genera las clases con los simbolos
     public void Generar() {
-        // Guardamos las operaciones del codigo fuente.
-        operaciones = new ArrayList<Operacion>();
-        simbolos = new ArrayList<Simbolo>();
-        String[] lineas = codigoFuente.split("\n");
-        for (String linea : lineas) {
-            String[] partes = linea.split("=");
-            Operacion operacion = new Operacion(partes[0], partes[1]);
-            operaciones.add(operacion);
-        }
 
-        // Ellimina operaciones repetidas.
-        ComprobarRepeticion();
-        // Instrucciones dependendientes suceptibles de reorganización.
-        ComprobarReorganizacion();
-        // Operaciones matematicas inecesarias o reducibles.
-        ComprobarOperaciones();
-        // Operaciones que no se utilizan.
-        // ---> Si esta en verdadero realizara las operaciones
-        ComprobarUtilidad(false);
+        // Inicializamos la tabla de simbolos
+        tablaSimbolos = new ArrayList<Simbolo>();
+        tablaErrores = new ArrayList<Errores>();
+        operaciones = new ArrayList<String>();
+        operacionesOptimizacion = new ArrayList<Operacion>();
+        // Codigo fuente a chart para leer parte por parte
+        var letras = this.codigoFuente.toCharArray();
+        String palabra = "";
+        String palabras = "";
 
-        // Finalmente generamos el contenido el cual seran las operaciones resultantes
-        // despues de haber realizado todas las comprobaciones.
-        String contenido = "";
-        for (Operacion operacion : operaciones) {
-            contenido += operacion.asinacion + "=" + operacion.operacion + "\n";
-        }
-        contenido = contenido.trim();
-        Generacion.GenerarCodigoIntermedio(contenido);
-    }
+        // Expreciones regulares:
+        Pattern cambioLinea = Pattern.compile("\n");
+        Pattern iniciarVariable = Pattern.compile("((Real|Entero) ([a-zA-Z0-9]*)\\;)");
+        Pattern iniciarVariableConValor = Pattern.compile("((Real|Entero) ([a-zA-Z0-9]*)\\=\\d*\\;)");
+        Pattern iniciarVariables = Pattern
+                .compile("((Real|Entero) (([a-zA-Z0-9]+)\\,)(([a-zA-Z0-9]+)\\,)*(([a-zA-Z0-9]+)\\;))");
+        Pattern iniciarVariablesConValor = Pattern.compile(
+                "((Real|Entero) (([a-zA-Z0-9]+\\=\\d*)\\,)(([a-zA-Z0-9]+\\=\\d*)\\,)*(([a-zA-Z0-9]+\\=\\d*)\\;))");
+        Pattern leerOEscribirVariables = Pattern.compile("((Leer|Escribir)\\(([a-zA-Z0-9]*\\))\\;)");
+        Pattern realizarOperacion = Pattern.compile(
+                "(\\w+)\\s*=\\s*((?:\\d+(?:\\.\\d+)?)|\\w+)\\s*((?:[-+*/]\\s*((?:\\d+(?:\\.\\d+)?)|\\w+)\\s*)+)(\\s*(\\([^()]+\\)|\\[[^\\[\\]]+\\]))?\\s*;");
 
-    private void ComprobarRepeticion() {
-        List<Operacion> comprobarOperaciones = new ArrayList<Operacion>();
-        comprobarOperaciones = operaciones;
-        for (int z = 0; z < operaciones.size(); z++) {
-            for (int x = 0; x < comprobarOperaciones.size(); x++) {
-                if (z != x) {
-                    String operacionEvaluar = operaciones.get(z).operacion.trim();
-                    String operacionAVerificar = comprobarOperaciones.get(x).operacion.trim();
-                    if (operacionEvaluar.equals(operacionAVerificar) == true) {
-                        comprobarOperaciones.remove(x);
-                    }
-                }
+        /*
+         * 1 ((Real|Entero) ([a-zA-Z0-9]*)\;)
+         * 2 ((Real|Entero) ([a-zA-Z0-9]*)\=\d*\;)
+         * 3 ((Real|Entero) (([a-zA-Z0-9]+)\,)(([a-zA-Z0-9]+)\,)*(([a-zA-Z0-9]+)\;))
+         * 4 ((Real|Entero)
+         * 5 (([a-zA-Z0-9]+\=\d*)\,)(([a-zA-Z0-9]+\=\d*)\,)*(([a-zA-Z0-9]+\=\d*)\;))
+         * 6 (Leer\(([a-zA-Z0-9]*\))\;)
+         * 7
+         * 8 (Escribir\(([a-zA-Z0-9]*\))\;)
+         * Completa
+         * [a-zA-Z0-9]+\=+(([a-zA-Z0-9.]+(\+|\/|\*|\-)+[a-zA-Z0-9.]+\;)|([a-zA-Z0-9.]+(\
+         * +|\/|\*|\-)+\(+[a-zA-Z0-9.]+(\+|\-|\/|\*)+[a-zA-Z0-9.]+\)+\;))
+         * 1 [a-zA-Z0-9]+\=+(([a-zA-Z0-9.]+(\+|\/|\*|\-)+[a-zA-Z0-9.]+\;)|)
+         * 2
+         * ([a-zA-Z0-9.]+(\+|\/|\*|\-)+\(+[a-zA-Z0-9.]+(\+|\-|\/|\*)+[a-zA-Z0-9.]+\)+\;)
+         * Final [a-zA-Z0-9]+\=+([a-zA-Z0-9.]+((\+|\/|\*|\-)+[a-zA-Z0-9.]+)*\;)
+         * Real cuenta,numero,resultado;
+         * Entero valor;
+         * Leer(valor);
+         * cuenta=23+(numero-valor);
+         * numero=cuenta/123.99;
+         * resultado=numero+cuenta;
+         * Escribir(resultado);
+         */
+
+        // Recorre palabra por palabra encontrada
+        for (int y = 0; y < letras.length; y++) {
+
+            palabra += letras[y];
+            posLectura++;
+            // Para detectar el cambio de linea
+            Matcher matcherCambioLinea = cambioLinea.matcher(codigoFuente);
+            matcherCambioLinea.region(0, y);
+            int lineaV = 1;
+            while (matcherCambioLinea.find()) {
+                lineaV++;
             }
-        }
-        operaciones = comprobarOperaciones;
-    }
-
-    private void ComprobarReorganizacion() {
-        List<Operacion> comprobarOperaciones = new ArrayList<Operacion>();
-        comprobarOperaciones = operaciones;
-        for (int z = 0; z < operaciones.size(); z++) {
-            for (int x = 0; x < comprobarOperaciones.size(); x++) {
-                if (z != x) {
-                    String operacionEvaluar = operaciones.get(z).operacion.trim();
-                    String operacionAVerificar = comprobarOperaciones.get(x).operacion.trim();
-                    if (operacionEvaluar.contains(operacionAVerificar) == true) {
-                        Operacion operacion = operaciones.get(z);
-                        operacion.operacion = operacion.operacion.replace(operacionAVerificar,
-                                comprobarOperaciones.get(x).asinacion);
-                        operaciones.set(z, operacion);
-                    }
-                }
+            if (lineaV > linea) {
+                linea = lineaV;
+                posLectura = 0;
             }
-        }
-    }
 
-    private void ComprobarOperaciones() {
-        List<Operacion> comprobarOperaciones = new ArrayList<Operacion>();
-        comprobarOperaciones = operaciones;
-        for (int z = 0; z < operaciones.size(); z++) {
-            for (int x = 0; x < comprobarOperaciones.size(); x++) {
-                if (z != x) {
-                    String operacionEvaluar = operaciones.get(z).operacion.trim();
-                    String[] operadores = { "+", "-", "/", "*" };
-                    for (String operador : operadores) {
-                        if (operacionEvaluar.contains(operador + "0") == true) {
-                            Operacion operacion = operaciones.get(z);
-                            operacion.operacion = operacion.operacion.replace(operador + "0",
-                                    "");
-                            operaciones.set(z, operacion);
+            if (palabra.split("\\s").length > 0) {
+                palabra = palabra.trim();
+
+                char letra = letras[y];
+                var x = ((letra + "").replace("", " ").trim());
+
+                if (x.length() == 0 | x.equals(";")) {
+
+                    if (palabras.length() == 0) {
+                        palabras += palabra;
+                    } else {
+                        palabras += " " + palabra;
+                    }
+                    palabra = "";
+
+                    Matcher matcherIniciarVariable = iniciarVariable.matcher(palabras);
+                    Matcher matcherIniciarVariableConValor = iniciarVariableConValor.matcher(palabras);
+                    Matcher matcherIniciarVariables = iniciarVariables.matcher(palabras);
+                    Matcher matcherIniciarVariablesConValor = iniciarVariablesConValor.matcher(palabras);
+                    Matcher matcherLeerEscribirVariables = leerOEscribirVariables.matcher(palabras);
+                    Matcher matcherRealizaroperaciones = realizarOperacion.matcher(palabras);
+
+                    if (matcherIniciarVariable.find()) {
+                        // Es una asignación de una sola variable sin valor asignado.
+                        // Ejemplo: Real variable;
+                        String[] arregloPalabras = palabras.split(" ");
+                        AgregarSimbolo(arregloPalabras[1].replace(";", ""), arregloPalabras[0], Id, 1, "" + linea,
+                                "0");
+                        palabras = "";
+                        Id++;
+                    }
+
+                    if (matcherIniciarVariableConValor.find()) {
+                        // Es una asignación de una sola variable con una valor asignado.
+                        // Ejemplo: Real variable=12;
+                        String[] arregloPalabras = palabras.split(" ");
+                        String[] valorYNombre = arregloPalabras[1].split("=");
+                        AgregarSimbolo(valorYNombre[0], arregloPalabras[0], Id, 1, "" + linea,
+                                valorYNombre[1].replace(";", ""));
+                        palabras = "";
+                        Id++;
+                    }
+
+                    if (matcherIniciarVariables.find()) {
+                        // Es una asignación de varias variables a la vez sin un valor inicial.
+                        // Ejemplo: Real cuenta,numero,resultado;
+                        String tipo = "";
+
+                        if (palabras.contains("Real ")) {
+                            palabras = palabras.replace("Real ", "");
+                            tipo = "Real";
                         }
+                        if (palabras.contains("Entero ")) {
+                            palabras = palabras.replace("Entero ", "");
+                            tipo = "Entero";
+                        }
+                        palabras = palabras.replace(";", "");
+
+                        String[] arregloPalabras = palabras.split(",");
+                        for (String variable : arregloPalabras) {
+                            AgregarSimbolo(variable, tipo, Id, 1,
+                                    "" + linea, "0");
+                            Id += 1;
+                        }
+                        palabras = "";
                     }
-                }
-            }
-        }
-    }
 
-    private void ComprobarUtilidad(boolean realizarOperaciones) {
-        // Resuelve operaciones y quita las variables que no fueron usadas.
-        for (Operacion operacion : operaciones) {
-            Simbolo simbolo = new Simbolo();
-            simbolo.nombre = operacion.asinacion;
-            simbolo.valor = operacion.operacion;
-            simbolo.repeticion = 0;
-            simbolos.add(simbolo);
-        }
-        operaciones.clear();
-        int index = 0;
-        for (Simbolo simbolo : simbolos) {
-            Pattern pattern = Pattern.compile("([\\d.]+|[a-zA-Z]\\w*|\\S)");
-            Matcher matcher = pattern.matcher(simbolo.valor);
-            String[] operacionesSeparadas = new String[0];
-            while (matcher.find()) {
-                String[] nuevoArreglo = new String[operacionesSeparadas.length + 1];
+                    if (matcherIniciarVariablesConValor.find()) {
+                        // Es una asignación de varias variables a la vez con un valor inicial.
+                        // Ejemplo: Entero x=1,y=2,z=0;
+                        String tipo = "";
 
-                for (int i = 0; i < operacionesSeparadas.length; i++) {
-                    nuevoArreglo[i] = operacionesSeparadas[i];
-                }
-                nuevoArreglo[operacionesSeparadas.length] = matcher.group();
-                operacionesSeparadas = nuevoArreglo;
-            }
+                        if (palabras.contains("Real ")) {
+                            palabras = palabras.replace("Real ", "");
+                            tipo = "Real";
+                        }
+                        if (palabras.contains("Entero ")) {
+                            palabras = palabras.replace("Entero ", "");
+                            tipo = "Entero";
+                        }
+                        palabras = palabras.replace(";", "");
 
-            String[] nuevoArregloFinal = new String[0];
-            for (String operacion : operacionesSeparadas) {
-                // Buscamos los valores.
-                if (!esNumeroOOperador(operacion)) {
-                    for (Simbolo simboloB : simbolos) {
-                        if (simboloB.nombre.equals(operacion)) {
-                            simboloB.repeticion += 1;
+                        String[] arregloPalabras = palabras.split(",");
+                        for (String variable : arregloPalabras) {
+                            String[] valorYNombre = variable.split("=");
+                            AgregarSimbolo(valorYNombre[0], tipo, Id, 1,
+                                    "" + linea, valorYNombre[1]);
+                            Id += 1;
+                        }
+                        palabras = "";
+                    }
 
-                            if (realizarOperaciones == true) {
-                                nuevoArregloFinal = Agregar(simboloB.valor, nuevoArregloFinal);
-                            } else {
-                                nuevoArregloFinal = Agregar(operacion, nuevoArregloFinal);
+                    if (matcherLeerEscribirVariables.find()) {
+                        // Es para leer o escribir las variables
+                        // Ejemplo: Leer(valor);
+                        // Ejemplo: Escribir(valor);
+                        palabras = palabras.replace("Leer", "");
+                        palabras = palabras.replace("Escribir", "");
+                        palabras = palabras.replace("(", "");
+                        palabras = palabras.replace(")", "");
+                        palabras = palabras.replace(";", "");
+
+                        if (ComprobarToken(palabras) == false) {
+                            GenerarError("No se encontro el token", palabras);
+                        }
+                        palabras = "";
+                    }
+
+                    if (matcherRealizaroperaciones.find()) {
+                        // Es para validar operaciones
+                        // cuenta=23+(numero-valor);
+                        // numero=cuenta/123.99;
+                        // resultado=numero+cuenta;
+
+                        // Primero separamos la parte de la asignación
+                        palabras = palabras.replace(";", "");
+                        String[] asignacion = palabras.split("=");
+                        String tipo = "";
+
+                        if (ComprobarToken(asignacion[0]) == false) {
+                            GenerarError("No se encontro el token al cual se le esta asignando", palabras);
+                        } else {
+                            Simbolo simbolo = VerSimbolo(asignacion[0]);
+                            tipo = simbolo.tipo;
+                        }
+
+                        String operacionSeparada = "";
+                        String parteOperacionSeparada = asignacion[1];
+
+                        parteOperacionSeparada = parteOperacionSeparada.replace("+", " + ");
+                        parteOperacionSeparada = parteOperacionSeparada.replace("-", " - ");
+                        parteOperacionSeparada = parteOperacionSeparada.replace("/", " / ");
+                        parteOperacionSeparada = parteOperacionSeparada.replace("*", " * ");
+                        operacionSeparada = operacionSeparada + parteOperacionSeparada;
+                        operaciones.add(RecorridoPrefijo.realizarPrefijo(operacionSeparada));
+
+                        Operacion operacionOp = new Operacion(asignacion[0], asignacion[1]);
+                        operacionesOptimizacion.add(operacionOp);
+
+                        String operacion = asignacion[1];
+                        operacion = operacion.replace("(", "");
+                        operacion = operacion.replace(")", "");
+                        operacion = operacion.replace(";", "");
+
+                        operacion = operacion.replace("+", " ");
+                        operacion = operacion.replace("-", " ");
+                        operacion = operacion.replace("/", " ");
+                        operacion = operacion.replace("*", " ");
+
+                        String[] variables = operacion.split(" ");
+
+                        for (String variable : variables) {
+                            if (VerificarConstante(variable) == false) {
+                                if (ComprobarToken(variable) == false) {
+                                    GenerarError("No se encontro el token", variable);
+                                } else {
+                                    Simbolo simbolo = VerSimbolo(variable);
+                                    if (tipo != simbolo.tipo) {
+                                        GenerarError(
+                                                "No se puede realizar la asignación si se utiliza una variable de diferente tipo al de la asignacion '"
+                                                        + tipo + "' -> '" + simbolo.tipo + "'",
+                                                variable);
+                                    }
+                                }
                             }
-
-                            // Agrega repeticion a la variable que se esta asingando variables.
-                            simbolos.get(index).repeticion += 1;
                         }
+                        palabras = "";
                     }
 
-                } else {
-                    nuevoArregloFinal = Agregar(operacion, nuevoArregloFinal);
                 }
             }
-            if (nuevoArregloFinal.length > 0) {
-                operacionesSeparadas = nuevoArregloFinal;
+        }
+
+        System.out.println();
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+        System.out.printf("%70s", "Expresiónes prefijas: ");
+        System.out.println();
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+
+        for (int y = 0; y < operaciones.size(); y++) {
+            String operacion = operaciones.get(y);
+            System.out.println(operacion);
+        }
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+
+        // Imprimimos tabla de errores
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+        System.out.printf("%70s", "Tabla de errores");
+        System.out.println();
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+        System.out.format("%-30s %-30s %-30s%n", "Error", "Variable", "Linea");
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+
+        for (int x = 0; x < tablaErrores.size(); x++) {
+            Errores oErrores = tablaErrores.get(x);
+
+            // Creamos un arreglo de String para poder dividir la linea
+            String[] lineasTexto = dividirTexto(oErrores.textoE, 30);
+
+            for (int i = 0; i < lineasTexto.length; i++) {
+                String texto = lineasTexto[i];
+
+                // Imprimir las columnas solo en la primera línea
+                if (i == 0) {
+                    System.out.format("%-30s %-30s %-30s%n", texto, oErrores.variable, oErrores.linea);
+                } else {
+                    System.out.format("%-30s %-30s %-30s%n", texto, "", "");
+                }
             }
-            index++;
-            if (realizarOperaciones == true) {
-                simbolo.valor = formatearNumero(Evaluador.resultado(operacionesSeparadas));
-            } else {
-                simbolo.valor = concatenarArreglo(operacionesSeparadas);
+        }
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+
+        // Imprimimos la tabla de simbolos.
+        System.out.println();
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+        System.out.printf("%70s", "Tabla de simbolos");
+        System.out.println();
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+        System.out.printf("%10s %10s %10s %10s %10s %10s", "Token", "Tipo", "Id", "Repeticiones", "Linea", "Valor");
+        System.out.println();
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+
+        for (
+
+                int x = 0; x < tablaSimbolos.size(); x++) {
+            Simbolo oSimbolo = tablaSimbolos.get(x);
+            System.out.format("%10s %10s %10s %10s %10s %10s", oSimbolo.token, oSimbolo.tipo, oSimbolo.idToken,
+                    oSimbolo.repeticion, oSimbolo.linea, oSimbolo.valor);
+            System.out.println();
+        }
+        System.out.println(
+                "---------------------------------------------------------------------------------------------------------------------------------");
+
+        AnalisisOptimizacion analisisOptimizacion = new AnalisisOptimizacion(operacionesOptimizacion, tablaSimbolos);
+        analisisOptimizacion.Generar();
+    }
+
+    public boolean ComprobarToken(String token) {
+        for (Simbolo simbolo : tablaSimbolos) {
+            if (simbolo.token.equals(token)) {
+                AñadirRepeticion(token);
+                return true;
             }
-
         }
+        return false;
+    }
 
-        // Añade las operaciones que se veran en el archivo txt que se comprobaron su
-        // utilidad.
-        for (Simbolo simbolo : simbolos) {
-            if (simbolo.repeticion > 0) {
-                Operacion operacion = new Operacion(simbolo.nombre, simbolo.valor);
-                operaciones.add(operacion);
+    public void AñadirRepeticion(String token) {
+        for (Simbolo simbolo : tablaSimbolos) {
+            if (simbolo.token.equals(token)) {
+                simbolo.repeticion++;
+                simbolo.linea = simbolo.linea + "," + linea;
             }
         }
-
     }
 
-    public String[] Agregar(String nuevoElemento, String[] nuevoArregloFinal) {
-        String[] nuevoArreglo = new String[nuevoArregloFinal.length + 1];
-        for (int i = 0; i < nuevoArregloFinal.length; i++) {
-            nuevoArreglo[i] = nuevoArregloFinal[i];
-        }
-        nuevoArreglo[nuevoArregloFinal.length] = nuevoElemento;
-        nuevoArregloFinal = nuevoArreglo;
-        return nuevoArregloFinal;
+    public void GenerarError(String error, String palabra) {
+
+        AgregarError(error, palabra, "" + linea);
+
+        System.out.println();
+        System.out.format("%10s %10s %10s %10s",
+                " \033[31mError " + error + ": \033[0m" + palabra, "Linea " + linea,
+                " Inicia " + (posLectura - 1), " Termina " + (posLectura - 1 + palabra.length()));
+        System.out.println();
+
+        return;
     }
 
-    // Mètodos auxiliares.
-
-    /**
-     * Concatena los elementos de un arreglo de cadenas en una sola cadena.
-     *
-     * @param arreglo Arreglo de cadenas a concatenar.
-     * @return Una cadena que contiene el contenido del arreglo.
-     */
-    public String concatenarArreglo(String[] arreglo) {
-        StringBuilder resultado = new StringBuilder();
-
-        for (String elemento : arreglo) {
-            resultado.append(elemento);
-        }
-
-        return resultado.toString();
-    }
-
-    /**
-     * Formatea un número double a una cadena evitando el punto decimal y el cero si
-     * el resultado es 1.0.
-     *
-     * @param numero Número double a formatear.
-     * @return Cadena formateada.
-     */
-    public static String formatearNumero(double numero) {
-        DecimalFormat formato = new DecimalFormat("#.#");
-        return formato.format(numero);
-    }
-
-    /**
-     * Verifica si una cadena es un número o uno de los símbolos +, -, /, *.
-     *
-     * @param cadena Cadena a verificar.
-     * @return true si la cadena es un número o uno de los símbolos especificados,
-     *         false en caso contrario.
-     */
-    public static boolean esNumeroOOperador(String cadena) {
-        try {
-            // Intenta convertir la cadena a un número
-            Double.parseDouble(cadena);
-            // Si no se produce una excepción, la cadena es un número
+    public boolean VerificarConstante(String constante) {
+        Pattern constantes = Pattern
+                .compile("[\\d.]+");
+        Matcher matcherConstantes = constantes.matcher(constante);
+        if (matcherConstantes.find()) {
             return true;
-        } catch (NumberFormatException e) {
-            // Si la cadena no es un número, verifica si es uno de los símbolos
-            // especificados
-            return esOperador(cadena);
+        } else {
+            return false;
         }
     }
 
-    /**
-     * Verifica si una cadena es uno de los operadores +, -, /, *.
-     *
-     * @param cadena Cadena a verificar.
-     * @return true si la cadena es uno de los operadores especificados, false en
-     *         caso contrario.
-     */
-    private static boolean esOperador(String cadena) {
-        return cadena.equals("+") || cadena.equals("-") || cadena.equals("*") || cadena.equals("/");
+    public Simbolo VerSimbolo(String token) {
+        for (Simbolo simbolo : tablaSimbolos) {
+            if (simbolo.token.equals(token)) {
+                return simbolo;
+            }
+        }
+        return null;
+    }
+
+    public void EscribirSimbolo(Simbolo oSimbolo) {
+        for (int x = 0; x < tablaSimbolos.size(); x++) {
+            if (tablaSimbolos.get(x).token.equals(oSimbolo.token)) {
+                tablaSimbolos.set(x, oSimbolo);
+            }
+        }
+    }
+
+    public void AgregarSimbolo(String token, String tipo, int idToken, int repeticiones, String linea,
+            String valor) {
+        Simbolo oSimbolo = new Simbolo();
+        oSimbolo.token = token;
+        oSimbolo.tipo = tipo;
+        oSimbolo.idToken = idToken;
+        oSimbolo.repeticion = repeticiones;
+        oSimbolo.linea = linea;
+        oSimbolo.valor = valor;
+        tablaSimbolos.add(oSimbolo);
+    }
+
+    public void AgregarError(String textoE, String variable, String linea) {
+        Errores oErrores = new Errores();
+
+        oErrores.textoE = textoE;
+        oErrores.variable = variable;
+        oErrores.linea = linea;
+        tablaErrores.add(oErrores);
+    }
+
+    public static String[] dividirTexto(String texto, int longitudMaxima) {
+        return texto != null ? texto.replaceAll("(.{1," + longitudMaxima + "})(\\s+|$)", "$1\n").split("\n")
+                : new String[] {};
     }
 }
