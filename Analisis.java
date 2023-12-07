@@ -1,4 +1,3 @@
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -14,8 +13,9 @@ public class Analisis {
     private List<String> operaciones;// Resultado de las operaciones.
     private int posLectura = 0; // Posición de lectura con respecto al codigo fuente.
     private int linea = 1; // Linea en la que va la posicion de lectura con respecto al codigo fuente.
-    private int Id = 0;// Identificardor auto incremental para las variables.
-    private List<Operacion> operacionesOptimizacion;// Seguardan las operaciones ya realizadas.
+    private int Id = 1;// Identificardor auto incremental para las variables.
+    private int IdConstantes = 500;// Identificardor auto incremental para las variables.
+    private List<Operacion> operacionesObjeto;// Seguardan las operaciones ya realizadas.
 
     public Analisis(String codigoFuente) {
         this.codigoFuente = codigoFuente;
@@ -28,7 +28,7 @@ public class Analisis {
         tablaSimbolos = new ArrayList<Simbolo>();
         tablaErrores = new ArrayList<Errores>();
         operaciones = new ArrayList<String>();
-        operacionesOptimizacion = new ArrayList<Operacion>();
+        operacionesObjeto = new ArrayList<Operacion>();
         // Codigo fuente a chart para leer parte por parte
         var letras = this.codigoFuente.toCharArray();
         String palabra = "";
@@ -222,10 +222,12 @@ public class Analisis {
                         parteOperacionSeparada = parteOperacionSeparada.replace("/", " / ");
                         parteOperacionSeparada = parteOperacionSeparada.replace("*", " * ");
                         operacionSeparada = operacionSeparada + parteOperacionSeparada;
-                        operaciones.add(RecorridoPrefijo.realizarPrefijo(operacionSeparada));
 
-                        Operacion operacionOp = new Operacion(asignacion[0], asignacion[1]);
-                        operacionesOptimizacion.add(operacionOp);
+                        String var = RecorridoPrefijo.realizarPrefijo(operacionSeparada);
+                        operaciones.add(var);
+
+                        Operacion operacionOp = new Operacion(operacionSeparada, var);
+                        operacionesObjeto.add(operacionOp);
 
                         String operacion = asignacion[1];
                         operacion = operacion.replace("(", "");
@@ -252,6 +254,30 @@ public class Analisis {
                                                 variable);
                                     }
                                 }
+                            } else {
+                                // Agregamos constante en la tabla de simbolos
+                                // Expresión regular para String
+                                // Expresión regular para float
+                                String regexFloat = "-?\\d*\\.\\d+|-?\\d+\\.\\d*";
+                                // Expresión regular para int
+                                String regexInt = "-?\\d+";
+
+                                // Validar float
+                                if (Pattern.matches(regexFloat, variable)) {
+                                    AgregarSimbolo(variable, "Real", IdConstantes, 1, "" + linea, variable);
+                                    IdConstantes++;
+                                }
+                                // Validar int
+                                else if (Pattern.matches(regexInt, variable)) {
+                                    AgregarSimbolo(variable, "Entero", IdConstantes, 1, "" + linea, variable);
+                                    IdConstantes++;
+                                }
+                                // Error
+                                else {
+                                    GenerarError("No se encontro el tipo de la variable 'Real' 'Entero' ",
+                                            variable);
+                                }
+
                             }
                         }
                         palabras = "";
@@ -263,29 +289,29 @@ public class Analisis {
 
         System.out.println();
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
         System.out.printf("%70s", "Expresiónes prefijas: ");
         System.out.println();
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
 
         for (int y = 0; y < operaciones.size(); y++) {
             String operacion = operaciones.get(y);
             System.out.println(operacion);
         }
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
 
         // Imprimimos tabla de errores
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
         System.out.printf("%70s", "Tabla de errores");
         System.out.println();
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
         System.out.format("%-30s %-30s %-30s%n", "Error", "Variable", "Linea");
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
 
         for (int x = 0; x < tablaErrores.size(); x++) {
             Errores oErrores = tablaErrores.get(x);
@@ -305,20 +331,20 @@ public class Analisis {
             }
         }
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
 
         // Imprimimos la tabla de simbolos.
         System.out.println();
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
         System.out.printf("%70s", "Tabla de simbolos");
         System.out.println();
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
         System.out.printf("%10s %10s %10s %10s %10s %10s", "Token", "Tipo", "Id", "Repeticiones", "Linea", "Valor");
         System.out.println();
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
 
         for (
 
@@ -329,10 +355,10 @@ public class Analisis {
             System.out.println();
         }
         System.out.println(
-                "---------------------------------------------------------------------------------------------------------------------------------");
+                "-----------------------------------------------------------------------------------------------------------");
 
-        AnalisisOptimizacion analisisOptimizacion = new AnalisisOptimizacion(operacionesOptimizacion, tablaSimbolos);
-        analisisOptimizacion.Generar();
+        AnalisisObjeto analisisObjeto = new AnalisisObjeto(operacionesObjeto, tablaSimbolos);
+        analisisObjeto.Generar();
     }
 
     public boolean ComprobarToken(String token) {
@@ -369,7 +395,7 @@ public class Analisis {
 
     public boolean VerificarConstante(String constante) {
         Pattern constantes = Pattern
-                .compile("[\\d.]+");
+                .compile("-?\\d+(\\.\\d+)?");
         Matcher matcherConstantes = constantes.matcher(constante);
         if (matcherConstantes.find()) {
             return true;

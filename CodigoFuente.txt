@@ -1,7 +1,7 @@
 Real cuenta,numero,resultado;
 Entero valor=10;
 Leer(valor);
-cuenta=23+(numero-valor);
-numero=cuenta/123.99;
+cuenta=23+(numero-cuenta);
 resultado=numero+cuenta;
+numero=12.44-resultado;
 Escribir(resultado);

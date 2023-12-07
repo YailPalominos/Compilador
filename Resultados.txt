@@ -1,6 +1,8 @@
-cuenta=0
-numero=0
-resultado=0
-valor=10
-cuenta=10
-resultado=10
+Leer valor
+= temp1 cuenta
++ temp1 numero
+- resultado temp1
+= resultado - resultado
+= temp2 12.44
+- numero temp2
+Escribir resultado
